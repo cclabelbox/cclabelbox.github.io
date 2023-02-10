@@ -1,0 +1,51 @@
+<script src="https://api.labelbox.com/static/labeling-api.js"></script>
+<div id="form"></div>
+
+<script>
+
+function get(url){
+    var Httpreq = new XMLHttpRequest();
+    Httpreq.open("GET", url, false);
+    // Httpreq.setRequestHeader("Access-Control-Allow-Origin","https://airbnb-labelbox.s3.us-east-1.amazonaws.com/")
+    Httpreq.send(null);
+    return Httpreq.responseText;
+  }
+
+// Fetch an asset to label then submit the label
+function label(label){
+    Labelbox.setLabelForAsset(label, "Any").then(() => {
+        Labelbox.fetchNextAssetToLabel();
+    });
+}
+
+Labelbox.currentAsset().subscribe((asset) => {
+    if (asset){
+        drawItem(asset.data);
+    }}
+)
+
+const subscription = Labelbox.currentAsset().subscribe((asset) => {
+  // Asset can be undefined
+  if (!asset){
+    return;
+  }
+
+  console.log(asset.id);
+  console.log(asset.data); 
+})
+
+// Stop receiving updates
+
+//Display the labeling interface
+function drawItem(dataToLabel){
+    const assetDataStr = get(dataToLabel)
+    const labelForm = `
+        <p>${dataToLabel}</p>
+        <div style="display: flex;">
+            <button onclick="label('bad')">Bad Quality</button>      
+            <button onclick="label('good')">Good Quality</button>    
+        </div>
+    `;
+    document.querySelector('#form').innerHTML = labelForm;
+}
+</script>
