@@ -1,51 +1,287 @@
-<script src="https://api.labelbox.com/static/labeling-api.js"></script>
-<div id="form"></div>
+<!doctype html>
+<html lang=en>
 
-<script>
+<head>
+    <meta charset=utf-8>
+    <title>Airbnb — Belong Anywhere</title>
+    <script src="https://api.labelbox.com/static/labeling-api.js"></script>
+    <script id="datafun"></script>
 
-function get(url){
-    var Httpreq = new XMLHttpRequest();
-    Httpreq.open("GET", url, false);
-    // Httpreq.setRequestHeader("Access-Control-Allow-Origin","https://airbnb-labelbox.s3.us-east-1.amazonaws.com/")
-    Httpreq.send(null);
-    return Httpreq.responseText;
-  }
+    <script>
+        // dynamically load script to load data
+        function createScriptDynamically(url) {
+          var scriptElement= document.getElementById("datafun");
+      
+          if(scriptElement != null){
+              scriptElement.remove();
+          }
+      
+          var scriptElement = document.createElement("script");
+          scriptElement.setAttribute("src", url);
+          scriptElement.setAttribute("type", "text/javascript");
+          scriptElement.setAttribute("id", "datafun");
+      
+          var head = document.getElementsByTagName("head")[0];
+          head.appendChild(scriptElement); 
+       }
+       
 
-// Fetch an asset to label then submit the label
-function label(label){
-    Labelbox.setLabelForAsset(label, "Any").then(() => {
-        Labelbox.fetchNextAssetToLabel();
-    });
-}
+        const createOneAutoComplete = (autoComplete, state) => {
+            const query = autoComplete.user_input || "";
+            const locations = autoComplete.location_display_name || [];
+            // const state = new Array(locations.length).fill(false);
 
-Labelbox.currentAsset().subscribe((asset) => {
-    if (asset){
-        drawItem(asset.data);
-    }}
-)
+            // Create the location suggestions
+            const ulEl = document.createElement("ul");
+            ulEl.setAttribute("id", "suggestion_list");
 
-const subscription = Labelbox.currentAsset().subscribe((asset) => {
-  // Asset can be undefined
-  if (!asset){
-    return;
-  }
+            locations.forEach((location, idx) => {
+                const li = document.createElement("li");
 
-  console.log(asset.id);
-  console.log(asset.data); 
-})
+                li.textContent = location;
+                if(state[idx]){
+                    li.className = "marked"
+                }
 
-// Stop receiving updates
+                li.addEventListener('click', event => {
+                    const isToggled = !state[idx];
+                    li.className = isToggled ? "marked": "";
+                    state[idx] = isToggled;
+                });
 
-//Display the labeling interface
-function drawItem(dataToLabel){
-    const assetDataStr = get(dataToLabel)
-    const labelForm = `
-        <p>${dataToLabel}</p>
-        <div style="display: flex;">
-            <button onclick="label('bad')">Bad Quality</button>      
-            <button onclick="label('good')">Good Quality</button>    
-        </div>
-    `;
-    document.querySelector('#form').innerHTML = labelForm;
-}
-</script>
+                ulEl.append(li);
+            });
+
+            const suggestionsEl = document.createElement("div");
+            suggestionsEl.className = "suggestions";
+            suggestionsEl.append(ulEl);
+
+            // Create query
+            const queryTextEl = document.createElement("span");
+            queryTextEl.className = "query-text";
+            queryTextEl.append(query);
+
+            const queryEl = document.createElement("div");
+            queryEl.className = "query";
+            queryEl.append(queryTextEl);
+
+            // Create the auto-complete element
+            const autoCompleteEl = document.createElement("div");
+            autoCompleteEl.className = "ac-suggestions";
+            autoCompleteEl.append(queryEl, suggestionsEl);
+
+            return [autoCompleteEl, state];
+        }
+
+            
+
+        //load asset, will be executed when reload
+        const subscription = Labelbox.currentAsset().subscribe((asset) => {
+            if (!asset){
+                return;
+            }
+            document.getElementById("freeform").value = ""
+            createScriptDynamically(asset.data);
+
+            var scriptElement= document.getElementById("datafun");
+  
+            // success event 
+            scriptElement.addEventListener("load", () => {
+                const autoCompleteList = getData();
+                if (!autoCompleteList) return;
+
+                const rootEl = document.getElementById("ac-suggestions-list");
+                if (!rootEl) return;
+
+                const autoCompleteEls = [];
+                const states = [];
+                
+                
+                const prev_states = new Array(autoCompleteList[0].location_display_name.length).fill(false);
+                if(asset.label){
+                    prev_res = JSON.parse(asset.label)
+                    labels = prev_res["label"]
+                    for(var i=0; i<prev_states.length; i++){
+                        prev_states[i] = labels[0][i]
+                    }
+                    if(prev_res["text"]){
+                        document.getElementById("freeform").value = prev_res["text"]
+                    } else {
+                        document.getElementById("freeform").value = ""
+                    }
+                    
+                } else {
+                    document.getElementById("freeform").value = ""
+                }
+                
+                // only one impression for now
+                const [el, state] = createOneAutoComplete(autoCompleteList[0], prev_states);
+                autoCompleteEls.push(el);
+                states.push(state);
+
+                // External interface... render the views and expose the state
+                document.autoCompleteDefectState = states;   // bool[][]. The element [i][j] is True if impression `i`, suggestion `j` was marked.
+
+                // TODO: not sure why this function will be fired twice and thus causing duplicates.
+                // need to fix the issue if have time
+                rootEl.append(...autoCompleteEls);
+                if(rootEl.querySelectorAll(".ac-suggestions").length > 1){
+                    rootEl.querySelectorAll(".ac-suggestions")[0].remove()
+                }
+            });
+                // error event
+            scriptElement.addEventListener("error", (ev) => {
+                    console.log("Error on loading file", ev);
+                });
+            })
+
+            // Fetch an asset to label then submit the label
+        function setLabel(label){
+            var text_value = document.getElementById("freeform").value
+            var res = {
+                        "label": label,
+                        "text": text_value
+                      }
+            document.getElementById("freeform").value = ""
+            Labelbox.setLabelForAsset(JSON.stringify(res), "Any").then(() => {
+                Labelbox.fetchNextAssetToLabel();
+            });
+        }
+
+        function onClickSubmit(labels){
+            setLabel(labels)
+        }
+    </script>
+
+
+
+    <style>
+        .ac-suggestions-list {
+            display: flex;
+            flex-flow: row wrap;
+            gap: 1rem;
+            padding: 1rem;
+            margin: 1rem 0;
+
+            font-family: Circular, -apple-system, BlinkMacSystemFont, Roboto, Helvetica Neue, sans-serif;
+            font-weight: normal;
+            font-size: 16px;
+            -webkit-font-smoothing: antialias;
+            /* border: 1px dotted gray; */
+        }
+
+        .ac-suggestions {
+            /* border: 1px solid yellow; */
+        }
+
+        .ac-suggestions .query {
+            padding: 0.5em 0.75em;
+            margin-bottom: 0.25em;
+
+            border: 1px solid gray;
+            border-radius: 10px;
+            /* border-bottom: 1px solid grey; */
+        }
+
+        .ac-suggestions .suggestions {
+            /* padding: 0.5em; */
+
+            border: 1px solid gray;
+            border-radius: 10px;
+        }
+
+        .ac-suggestions .query-text {
+            white-space: pre;
+            /* border-right: 1px solid black; */
+        }
+
+        .ac-suggestions .suggestions ul {
+            margin: 0.25em 0 0 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .ac-suggestions .suggestions li {
+            margin: 0 0.5em 0.25em 0.5em;
+            padding: 0.25em;
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-radius: 5px;
+        }
+
+        .ac-suggestions .suggestions li.marked {
+            border: 1px solid red;
+        }
+
+        .ac-suggestions .suggestions li:hover {
+            background-color: #eee;
+        }
+        .center {
+            /* margin: auto; */
+            margin-left: 10%;
+            width: 70%;
+            border: 3px;
+            padding: 10px;
+            font-size: 16px;
+            left: 10.0%;
+            top: 10.0%;
+        }
+        .instruction {
+            margin-left: 10%;
+            width: 40%;
+            border: 1px;
+            padding: 3px;
+            font-size: 16px;
+            left: 30.0%;
+            top: 1.0%;
+        }
+        .button {
+            margin: auto;
+            width: 70%;
+            border: 1px;
+            padding: 3px;
+            font-size: 16px;
+            left: 3.0%;
+            top: 1.0%;
+        }
+
+        .textarea {
+        width: 70%;
+        padding: 12px 20px;
+        margin: 8px 0;
+        display: inline-block;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="instruction">
+        <p>
+            Please pick the location (one or more) that is NOT a good destination for Airbnb.
+        </p>
+    </div>
+    <div class="center">
+        <div id="ac-suggestions-list" class="ac-suggestions-list"></div>
+        <!-- <form> -->
+            <label for="fname">Please provide the reason of your selection(s)</label><br>
+            <textarea id="freeform" name="freeform" rows="4" cols="50">
+            </textarea>
+        <!-- </form> -->
+    </div>
+
+    <div class="button">
+        <p>
+            <!-- <button onclick=onClickSubmit(document.autoCompleteDefectState)>Get data to submit</button> -->
+            <button onclick=onClickSubmit(document.autoCompleteDefectState)>Submit</button>
+        </p>
+    </div>
+
+    <p>
+        
+    </p>
+</body>
+
+</html>
