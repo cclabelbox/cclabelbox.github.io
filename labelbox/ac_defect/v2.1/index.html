@@ -281,7 +281,6 @@
     console.log("Unknown question type", question);
   }
 
-  let markDataAsLoaded;
 
   Labelbox.currentAsset().subscribe(asset => {
       if (asset) {
@@ -290,7 +289,6 @@
         scriptElement.addEventListener("load", () => {
           drawAsset(asset);
           dataIsLoaded = true;
-          markDataAsLoaded();
         });
       }
     });
@@ -412,6 +410,7 @@
   const createOneAutoComplete = (autoComplete) => {
       const query = autoComplete.user_input || "";
       const locations = autoComplete.location_display_name || [];
+      const urls = autoComplete.google_place_id
       const state = new Array(locations.length).fill(false);
 
       // Create the location suggestions
@@ -421,7 +420,8 @@
       locations.forEach((location, idx) => {
           const li = document.createElement("li");
 
-          li.textContent = location;
+          li.innerHTML = `<a href=https://www.google.com/maps/place/?q=place_id:${urls[idx]}>${location}</a>`
+          // li.textContent = location;
           if(state[idx]){
               li.className = "marked"
           }
