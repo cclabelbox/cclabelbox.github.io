@@ -1,0 +1,706 @@
+<link
+  rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css"
+/>
+<link
+  href="https://fonts.googleapis.com/icon?family=Material+Icons"
+  rel="stylesheet"
+/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+<script src="https://api.labelbox.com/static/labeling-api.js"></script>
+<script id="datafun"></script>
+
+<div class="app flex-grow">
+  <div class="flex-column sidebar">
+    <div class="navbar">
+      <i
+        class="material-icons"
+        style="color: #9b9b9b; cursor: pointer;"
+        onclick="goHome()"
+        >home</i
+      >
+    </div>
+
+    <div id="questions"></div>
+
+    <div class="flex-grow"></div>
+    <div style="display: flex;">
+      <a
+        class="waves-effect waves-light btn-large"
+        style="background-color: white; color: black; width: 100%;"
+        onclick="skip()"
+        >Skip</a
+      >
+      <a
+        class="waves-effect waves-light btn-large"
+        style="background-color: #03a9f4; width: 100%;"
+        onclick="submit()"
+        >Submit</a
+      >
+    </div>
+  </div>
+
+  <div class="flex-grow flex-column content">
+    <div style="display: flex; align-items: center; padding: 10px 0px">
+      <i
+        id="back"
+        class="material-icons"
+        style="color: #9b9b9b; margin-left: -5px; opacity: 0.2;"
+        onclick="goBack()"
+        >keyboard_arrow_left</i
+      >
+      <div style="color: #717171; padding: 0px 10px;" id="externalid">
+        Label this asset
+      </div>
+      <i
+        id="next"
+        class="material-icons"
+        style="color: #9b9b9b; margin-left: -5px; opacity: 0.2;"
+        onclick="goNext()"
+        >keyboard_arrow_right</i
+      >
+    </div>
+    <div id="asset"><div id="ac-suggestions-list" class="ac-suggestions-list">loading...</div></div>
+  </div>
+</div>
+
+<script>
+
+  let dataIsLoaded = false;
+  // dynamically load script to load data
+  function createScriptDynamically(url) {
+    var scriptElement= document.getElementById("datafun");
+
+    if(scriptElement != null){
+        scriptElement.remove();
+    }
+
+    var scriptElement = document.createElement("script");
+    scriptElement.setAttribute("src", url);
+    scriptElement.setAttribute("type", "text/javascript");
+    scriptElement.setAttribute("id", "datafun");
+
+    var head = document.getElementsByTagName("head")[0];
+    head.appendChild(scriptElement); 
+  }
+
+  let state = {
+    projectId: new URL(window.location.href).searchParams.get("project"),
+    currentAsset: undefined
+  };
+  const defaultConfiguration = {
+  "classifications": [
+    {
+      "name": "relevance_problem",
+      "instructions": "Select all <b>unlikely destinations<\b> for Airbnb",
+      "type": "checklist",
+      "options": [
+        {
+          "value": "location_0",
+          "label": "location_0"
+        },
+        {
+          "value": "location_1",
+          "label": "location_1"
+        },
+        {
+          "value": "location_2",
+          "label": "location_2"
+        },
+        {
+          "value": "location_3",
+          "label": "location_3"
+        },
+        {
+          "value": "location_4",
+          "label": "location_4"
+        }
+      ]
+    },
+    {
+      "name": "description_relevance",
+      "instructions": "Please provide your reason",
+      "type": "text"
+    },
+    {
+      "name": "language_problem",
+      "instructions": "Select all locations with <b>language</b> problem",
+      "type": "checklist",
+      "options": [
+        {
+          "value": "location_0",
+          "label": "location_0"
+        },
+        {
+          "value": "location_1",
+          "label": "location_1"
+        },
+        {
+          "value": "location_2",
+          "label": "location_2"
+        },
+        {
+          "value": "location_3",
+          "label": "location_3"
+        },
+        {
+          "value": "location_4",
+          "label": "location_4"
+        }
+      ]
+    },
+    {
+      "name": "description_language",
+      "instructions": "Please provide your reason",
+      "type": "text"
+    },
+    {
+      "name": "duplicte_problem",
+      "instructions": "Select all <b>duplicated</b> locations",
+      "type": "checklist",
+      "options": [
+        {
+          "value": "location_0",
+          "label": "location_0"
+        },
+        {
+          "value": "location_1",
+          "label": "location_1"
+        },
+        {
+          "value": "location_2",
+          "label": "location_2"
+        },
+        {
+          "value": "location_3",
+          "label": "location_3"
+        },
+        {
+          "value": "location_4",
+          "label": "location_4"
+        }
+      ]
+    },
+    {
+      "name": "description_duplication",
+      "instructions": "Please provide your reason",
+      "type": "text"
+    },
+    {
+      "name": "duplicte_problem",
+      "instructions": "Select all duplicated locations",
+      "type": "checklist",
+      "options": [
+        {
+          "value": "location_0",
+          "label": "location_0"
+        },
+        {
+          "value": "location_1",
+          "label": "location_1"
+        },
+        {
+          "value": "location_2",
+          "label": "location_2"
+        },
+        {
+          "value": "location_3",
+          "label": "location_3"
+        },
+        {
+          "value": "location_4",
+          "label": "location_4"
+        }
+      ]
+    },
+    {
+      "name": "description_duplication",
+      "instructions": "Please provide your reason",
+      "type": "text"
+    }
+  ]
+};
+
+  function createOptionQuestion({ type, name, options, instructions }, answer) {
+    const createOption = ({ value, label }) => {
+      return `
+      <p value=${value}>
+        <label>
+          ${
+            type == "radio"
+              ? `<input class="with-gap" type="radio" name="group-${name}" valuetosubmit="${value}" ${
+                  answer === value ? "checked" : ""
+                } />`
+              : `<input type="checkbox" class="filled-in" valuetosubmit="${value}" ${
+                  (answer || []).indexOf(value) !== -1 ? "checked" : ""
+                } />`
+          }
+          <span>${label}</span>
+        </label>
+      </p>
+    `;
+    };
+    return `
+    <div class="question" id="${name}" questiontype="${type}">
+      <div class="label">${instructions}</div>
+      <form action="#">
+        ${options.map(createOption).join("")}
+      </form>
+    </div>
+  `;
+  }
+
+  function createTextInput({ id, label }, answer) {
+    return `
+    <div class="question" id="${id}" questiontype="text">
+      <div class="input-field col s12">
+        <div class="label">${label}</div>
+        <input class="materialize-textarea" data-length="120" value="${answer ||
+          ""}"></input>
+      </div>
+    </div>
+  `;
+  }
+  function createQuestion(question, answers) {
+    
+    const optionalAnswer = (answers || {})[question.name];
+    if (question.type === "text") {
+      return createTextInput(
+        {
+          id: question.name,
+          label: question.instructions
+        },
+        optionalAnswer
+      );
+    }
+
+    if (question.type === "radio" || question.type === "checklist") {
+      return createOptionQuestion(question, optionalAnswer);
+    }
+
+    console.log("Unknown question type", question);
+  }
+
+  let markDataAsLoaded;
+
+  Labelbox.currentAsset().subscribe(asset => {
+      if (asset) {
+        createScriptDynamically(asset.data);
+        var scriptElement= document.getElementById("datafun");
+        scriptElement.addEventListener("load", () => {
+          drawAsset(asset);
+          dataIsLoaded = true;
+          markDataAsLoaded();
+        });
+      }
+    });
+
+  
+
+  let classifications = [];
+  let markQuestionsAsLoaded;
+  new Promise(resolve => {
+    markQuestionsAsLoaded = resolve;
+  }).then(() => {
+    
+  });
+
+  function drawQuestions(classifications, answers) {
+    document.querySelector("#questions").innerHTML = classifications
+      .map(classification => createQuestion(classification, answers))
+      .join("");
+  }
+
+  Labelbox.getTemplateCustomization().subscribe(customization => {
+    classifications =
+      (customization && customization.classifications) ||
+      defaultConfiguration.classifications;
+    drawQuestions(classifications);
+    markQuestionsAsLoaded();
+  });
+
+  function goHome() {
+    window.location.href =
+      "https://app.labelbox.com/projects/" + state.projectId;
+  }
+
+  function skip() {
+    Labelbox.skip().then(() => {
+      Labelbox.fetchNextAssetToLabel();
+    });
+  }
+
+  function getChosenVideoId() {
+    if (document.querySelector("#chose-" + state.leftVideoId).checked) {
+      return state.leftVideoId;
+    }
+
+    if (document.querySelector("#chose-" + state.rightVideoId).checked) {
+      return state.rightVideoId;
+    }
+
+    return;
+  }
+
+  function getLabel() {
+    // const chosenVideoId = getChosenVideoId();
+    const getAnswer = node => {
+      const key = node.getAttribute("id");
+      const type = node.getAttribute("questiontype");
+      if (type === "text") {
+        return {
+          [key]: node.querySelector("input").value
+        };
+      }
+
+      if (type === "radio") {
+        const inputs = Array.from(node.querySelectorAll("input"));
+        const selected = inputs.find(child => child.checked);
+        return {
+          [key]: selected && selected.getAttribute("valuetosubmit")
+        };
+      }
+
+      if (type === "checklist") {
+        const inputs = Array.from(node.querySelectorAll("input"));
+        const value = inputs
+          .filter(child => child.checked)
+          .map(child => child.getAttribute("valuetosubmit"));
+        return {
+          [key]: value
+        };
+      }
+
+      console.log("Unable to find type for", node);
+    };
+
+    const answers = Array.from(
+      document.querySelector("#questions").children
+    ).map(getAnswer);
+
+    return Object.assign(...answers);
+  }
+
+  function submit() {
+    const label = JSON.stringify(getLabel());
+    const jumpToNext = Boolean(!state.currentAsset.label);
+    // Progress is this asset is new
+    Labelbox.setLabelForAsset(label).then(() => {
+      if (jumpToNext) {
+        Labelbox.fetchNextAssetToLabel();
+      }
+    });
+    if (jumpToNext) {
+      document.querySelector("#ac-suggestions-list").innerHTML = "loading...";
+    }
+  }
+
+  function goBack() {
+    if (state.currentAsset.previous) {
+      Labelbox.setLabelAsCurrentAsset(state.currentAsset.previous);
+    }
+  }
+
+  function goNext() {
+    if (state.currentAsset.next) {
+      Labelbox.setLabelAsCurrentAsset(state.currentAsset.next);
+    } else {
+      Labelbox.fetchNextAssetToLabel();
+    }
+  }
+
+  const createOneAutoComplete = (autoComplete) => {
+      const query = autoComplete.user_input || "";
+      const locations = autoComplete.location_display_name || [];
+      const state = new Array(locations.length).fill(false);
+
+      // Create the location suggestions
+      const ulEl = document.createElement("ul");
+      ulEl.setAttribute("id", "suggestion_list");
+
+      locations.forEach((location, idx) => {
+          const li = document.createElement("li");
+
+          li.textContent = location;
+          if(state[idx]){
+              li.className = "marked"
+          }
+
+          // li.addEventListener('click', event => {
+          //     const isToggled = !state[idx];
+          //     li.className = isToggled ? "marked": "";
+          //     state[idx] = isToggled;
+          // });
+
+          ulEl.append(li);
+      });
+
+      const suggestionsEl = document.createElement("div");
+      suggestionsEl.className = "suggestions";
+      suggestionsEl.append(ulEl);
+
+      // Create query
+      const queryTextEl = document.createElement("span");
+      queryTextEl.className = "query-text";
+      queryTextEl.append(query);
+
+      const queryEl = document.createElement("div");
+      queryEl.className = "query";
+      queryEl.append(queryTextEl);
+
+      // Create the auto-complete element
+      const autoCompleteEl = document.createElement("div");
+      autoCompleteEl.className = "ac-suggestions";
+      autoCompleteEl.append(queryEl, suggestionsEl);
+
+      return [autoCompleteEl, state];
+  }
+
+  function drawAsset(asset) {
+    const backButton = document.querySelector("#back");
+    backButton.style.opacity = asset.previous ? 1 : 0.2;
+    backButton.style.cursor = asset.previous ? "pointer" : "inherit";
+    const hasNext = Boolean(asset.next || asset.label);
+    const nextButton = document.querySelector("#next");
+    nextButton.style.opacity = hasNext ? 1 : 0.2;
+    nextButton.style.cursor = hasNext ? "pointer" : "inherit";
+    
+    const autoCompleteList = getData();
+    if ((state.currentAsset && state.currentAsset.data) !== asset.data) {
+      // document.querySelector("#asset").innerHTML = getHtmlForAsset({
+      //   leftVideo,
+      //   rightVideo
+      // });
+      document.querySelector("#ac-suggestions-list").innerHTML = "";
+
+      
+      if (!autoCompleteList) return;
+      const rootEl = document.getElementById("ac-suggestions-list");
+      if (!rootEl) return;
+
+      const autoCompleteEls = [];
+      const states = [];
+
+      // const prev_states = new Array(autoCompleteList[0].location_display_name.length).fill(false);
+      const [el, state] = createOneAutoComplete(autoCompleteList[0]);
+      autoCompleteEls.push(el);
+      states.push(state);
+
+      document.autoCompleteDefectState = states;
+      rootEl.append(...autoCompleteEls);
+
+      // TODO: not sure why this function will be fired twice and thus causing duplicates.
+      // need to fix the issue if have time
+      if(rootEl.querySelectorAll(".ac-suggestions").length > 1){
+          rootEl.querySelectorAll(".ac-suggestions")[0].remove()
+      }
+    }
+    if ((state.currentAsset && state.currentAsset.id) !== asset.id) {
+      locations = autoCompleteList[0].location_display_name
+      for(let loc_index=0;loc_index<locations.length;loc_index++){
+        for(let i=0; i<3; i++){
+          classifications[i*2]["options"][loc_index]["label"] = locations[loc_index]
+        }
+      }
+      if (asset.label) {
+        try {
+          const label = JSON.parse(asset.label);
+          drawQuestions(classifications, label);
+        } catch (e) {
+          console.log("failed to read label", e);
+        }
+      } else {
+        drawQuestions(classifications);
+      }
+    }
+    state = {
+      ...state,
+      currentAsset: asset,
+      // leftVideoId: leftVideo.id,
+      // rightVideoId: rightVideo.id
+    };
+  }
+</script>
+
+<style>
+  .ac-suggestions-list {
+      display: flex;
+      flex-flow: row wrap;
+      gap: 1rem;
+      padding: 1rem;
+      margin: 1rem 0;
+
+      font-family: Circular, -apple-system, BlinkMacSystemFont, Roboto, Helvetica Neue, sans-serif;
+      font-weight: normal;
+      font-size: 16px;
+      -webkit-font-smoothing: antialias;
+      /* border: 1px dotted gray; */
+  }
+
+  .ac-suggestions {
+      /* border: 1px solid yellow; */
+  }
+
+  .ac-suggestions .query {
+      padding: 0.5em 0.75em;
+      margin-bottom: 0.25em;
+
+      border: 1px solid gray;
+      border-radius: 10px;
+      /* border-bottom: 1px solid grey; */
+  }
+
+  .ac-suggestions .suggestions {
+      /* padding: 0.5em; */
+
+      border: 1px solid gray;
+      border-radius: 10px;
+  }
+
+  .ac-suggestions .query-text {
+      white-space: pre;
+      /* border-right: 1px solid black; */
+  }
+
+  .ac-suggestions .suggestions ul {
+      margin: 0.25em 0 0 0;
+      padding: 0;
+      list-style: none;
+  }
+
+  .ac-suggestions .suggestions li {
+      margin: 0 0.5em 0.25em 0.5em;
+      padding: 0.25em;
+      cursor: pointer;
+      border: 1px solid transparent;
+      border-radius: 5px;
+  }
+
+  .ac-suggestions .suggestions li.marked {
+      border: 1px solid red;
+  }
+
+  .ac-suggestions .suggestions li:hover {
+      background-color: #eee;
+  }
+  .center {
+      /* margin: auto; */
+      margin-left: 10%;
+      width: 70%;
+      border: 3px;
+      padding: 10px;
+      font-size: 16px;
+      left: 10.0%;
+      top: 10.0%;
+  }
+  .instruction {
+      margin-left: 10%;
+      width: 40%;
+      border: 1px;
+      padding: 3px;
+      font-size: 16px;
+      left: 30.0%;
+      top: 1.0%;
+  }
+  .button {
+      margin: auto;
+      width: 70%;
+      border: 1px;
+      padding: 3px;
+      font-size: 16px;
+      left: 3.0%;
+      top: 1.0%;
+  }
+  .app {
+  height: 100vh;
+}
+
+.flex-column {
+  flex-direction: column;
+}
+
+.flex-grow {
+  display: flex;
+  flex-grow: 1;
+}
+
+.content {
+  margin: 0px 20px;
+}
+
+.asset {
+  max-width: 40%;
+  max-height: 40%;
+}
+
+.sidebar {
+  display: flex;
+  height: 100vh;
+  border-right: 1px solid #e8e8e8;
+  width: 500px;
+  min-width: 300px;
+}
+
+.text {
+  background-color: #ececec;
+  padding: 30px;
+  font-size: 20px;
+  overflow: auto;
+  font-style: italic;
+}
+
+.navbar {
+  padding: 10px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.btn {
+  background-color: aqua
+}
+
+.btn:visited {
+  background-color: yellow
+}
+
+.btn:hover {
+  background-color: skyblue
+}
+
+.btn:active {
+  background-color: pink;
+}
+
+.btn:focus {
+  background-color: pink;
+}
+
+#questions {
+  padding: 10px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+label {
+  color: #000000 !important;
+}
+
+.question {
+  margin-bottom: 15px;
+}
+
+[type="radio"]:checked+span:after, [type="radio"].with-gap:checked+span:before, [type="radio"].with-gap:checked+span:after {
+  border-color: #03a9f4 !important;
+}
+
+[type="checkbox"].filled-in:checked+span:not(.lever):after {
+  border-color: #03a9f4 !important;
+  background-color: #03a9f4 !important;
+  color: #000000 !important;
+}
+
+input.materialize-textarea:focus:not([readonly]) {
+  border-color: #03a9f4 !important;
+}
+
+
+</style>
