@@ -114,6 +114,10 @@
         {
           "value": "location_4",
           "label": "location_4"
+        },
+        {
+          "value": "no_defects",
+          "label": "All suggestions look fine."
         }
       ]
     },
@@ -146,6 +150,10 @@
         {
           "value": "location_4",
           "label": "location_4"
+        },
+        {
+          "value": "no_defects",
+          "label": "All suggestions look fine."
         }
       ]
     },
@@ -178,6 +186,10 @@
         {
           "value": "location_4",
           "label": "location_4"
+        },
+        {
+          "value": "no_defects",
+          "label": "All suggestions look fine."
         }
       ]
     },
@@ -508,6 +520,7 @@
           drawQuestions(classifications, label);
         } catch (e) {
           console.log("failed to read label", e);
+          drawQuestions(classifications);
         }
       } else {
         drawQuestions(classifications);
@@ -675,9 +688,11 @@
 }
 
 #questions {
+  margin: 20px !important;
   padding: 10px;
   overflow-y: auto;
   height: 100%;
+
 }
 
 label {
