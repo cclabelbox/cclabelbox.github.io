@@ -199,7 +199,7 @@
       "type": "text"
     },
     {
-      "name": "duplicte_problem",
+      "name": "duplicate_problem",
       "instructions": "Select all duplicated locations",
       "type": "checklist",
       "options": [
@@ -222,6 +222,10 @@
         {
           "value": "location_4",
           "label": "location_4"
+        },
+        {
+          "value": "no_defects",
+          "label": "All suggestions look fine."
         }
       ]
     },
@@ -355,6 +359,7 @@
   function getLabel() {
     // const chosenVideoId = getChosenVideoId();
     const getAnswer = node => {
+      
       const key = node.getAttribute("id");
       const type = node.getAttribute("questiontype");
       if (type === "text") {
@@ -383,19 +388,72 @@
 
       console.log("Unable to find type for", node);
     };
-
+    
     const answers = Array.from(
       document.querySelector("#questions").children
     ).map(getAnswer);
+    
+    // validate labels
+    var validLabels = true;
+    // not selected
+    if (validLabels && answers[0]["relevance_problem"].length == 0){
+      alert("Please answer the unlikely destination section")
+      validLabels = false;
+    }
 
-    return Object.assign(...answers);
+    if (validLabels && answers[2]["language_problem"].length == 0){
+      alert("Please answer the language section")
+      validLabels = false;
+    }
+
+    if (validLabels && answers[4]["duplicate_problem"].length == 0){
+      alert("Please answer the duplication section")
+      validLabels = false;
+    }
+
+    // no text entered when suggestions are selected
+    if(validLabels && answers[0]["relevance_problem"].length > 0){
+      if(!answers[0]["relevance_problem"].includes("no_defects") && answers[1]["description_relevance"].length<=0){
+        alert("Please enter reasons for unlikely destionations you selected")
+        validLabels = false;
+      }
+    }
+
+    if(validLabels && answers[2]["language_problem"].length > 0){
+      if(!answers[2]["language_problem"].includes("no_defects") && answers[3]["description_language"].length<=0){
+        alert("Please enter reasons in the language section")
+        validLabels = false;
+      }
+    }
+
+    if(validLabels && answers[4]["duplicate_problem"].length > 0){
+      if(!answers[4]["duplicate_problem"].includes("no_defects") && answers[5]["description_duplication"].length<=0){
+        alert("Please enter reasons for duplicate section")
+        validLabels = false;
+      }
+    }
+
+
+    if (validLabels){
+      return Object.assign(...answers);
+    } else {
+      return null;
+    }
+    
   }
 
   function submit() {
-    const label = JSON.stringify(getLabel());
-    const jumpToNext = Boolean(!state.currentAsset.label);
-    // Progress is this asset is new
-    Labelbox.setLabelForAsset(label).then(() => {
+    
+    var label = getLabel()
+    var jumpToNext = false;
+    if(label == null) {
+      jumpToNext = false;
+    } else {
+      jumpToNext = Boolean(!state.currentAsset.label);
+      label = JSON.stringify(label);
+
+      // Progress if this asset is new
+      Labelbox.setLabelForAsset(label).then(() => {
       if (jumpToNext) {
         Labelbox.fetchNextAssetToLabel();
       }
@@ -403,6 +461,8 @@
     if (jumpToNext) {
       document.querySelector("#ac-suggestions-list").innerHTML = "loading...";
     }
+    }
+  
   }
 
   function goBack() {
